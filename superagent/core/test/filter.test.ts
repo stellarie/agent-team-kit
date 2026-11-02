@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ingest } from "../src/dispatch.ts";
 import { keepEvent } from "../src/filter.ts";
+import { GitHub } from "../src/github.ts";
 import { config, event, harness } from "./helpers.ts";
 
 const cfg = config();
@@ -30,4 +31,16 @@ test("an owned thread still rejects a stranger", () => {
 
 test("an event on a repo outside the config is dropped", () => {
   assert.equal(keepEvent(event({ repo: "acme/other" }), cfg, none), false);
+});
+
+test("a service comment posted under an allowed login never re-enters its own thread", () => {
+  const posted: string[] = [];
+  const gh = new GitHub((_args, input) => {
+    posted.push(input ?? "");
+    return "";
+  });
+  gh.comment("acme/app", 7, "Worker report");
+  const owned = new Set(["acme/app#7"]);
+  assert.equal(keepEvent(event({ author: "alice", body: posted[0] }), cfg, owned), false);
+  assert.equal(keepEvent(event({ author: "alice", body: "a real follow-up" }), cfg, owned), true);
 });

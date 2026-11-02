@@ -44,3 +44,17 @@ test("a crash in the starting state is adopted when the Worker ran and stalled w
   assert.equal(s.threads["acme/app#1"].status, "running");
   assert.equal(s.threads["acme/app#2"].status, "stalled");
 });
+
+test("a restart reruns the queued follow-ups of a Worker that died without a result", () => {
+  const h = harness();
+  const s = h.store.load();
+  s.threads["acme/app#3"] = { ...starting(3), status: "running", pending: ["stellarie wrote: reply OK"] };
+  const jobDir = join(h.store.workerDir("acme/app#3"), "job");
+  mkdirSync(jobDir, { recursive: true });
+  writeFileSync(join(jobDir, "heartbeat"), String(h.deps.now() - 15 * 60_000));
+  recover(h.deps, s);
+  assert.equal(s.threads["acme/app#3"].status, "running");
+  assert.equal(s.threads["acme/app#3"].pending.length, 0);
+  assert.equal(h.spawns.length, 1);
+  assert.match(h.spawns[0].job.prompt, /reply OK/);
+});
