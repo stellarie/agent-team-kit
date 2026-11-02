@@ -233,9 +233,24 @@ export function poll(d: Deps, s: State): GhEvent[] {
   return d.channel.pollAll(s.cursors, d.now());
 }
 
-// Adopt or clear records a crash left in "starting".
+// The runner beats every 15 s.
+const DEAD_MS = 60_000;
+
+// Adopt or clear records a crash or stop left behind.
 export function recover(d: Deps, s: State): void {
   for (const rec of Object.values(s.threads)) {
+    if (rec.status === "running") {
+      const job = readJob(jobDir(d, rec.thread));
+      if (job.finished || job.heartbeatAt === null || d.now() - job.heartbeatAt < DEAD_MS) continue;
+      rec.status = "stalled";
+      rec.pid = null;
+      if (rec.pending.length > 0) {
+        const msg = rec.pending.join("\n\n---\n\n");
+        rec.pending = [];
+        runWorker(d, rec, msg);
+      }
+      continue;
+    }
     if (rec.status !== "starting") continue;
     const job = readJob(jobDir(d, rec.thread));
     rec.status = job.heartbeatAt !== null ? "running" : "stalled";
