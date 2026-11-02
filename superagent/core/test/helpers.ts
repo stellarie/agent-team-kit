@@ -63,7 +63,7 @@ export function harness(cfg: Config = config()): Harness {
   const deps: Deps = {
     cfg,
     store,
-    gh,
+    channel: gh,
     spawner: (dir, job) => {
       spawns.push({ dir, job });
       return 4242;

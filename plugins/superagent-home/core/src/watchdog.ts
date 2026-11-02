@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import type { Config } from "./config.ts";
-import type { GitHub } from "./github.ts";
+import type { Channel } from "./github.ts";
 import { isAlive, readLockPid } from "./lock.ts";
 import type { StateStore, ThreadStatus } from "./state.ts";
 import { childPid, readJob } from "./worker.ts";
@@ -8,7 +8,7 @@ import { childPid, readJob } from "./worker.ts";
 export interface WatchdogDeps {
   cfg: Config;
   store: StateStore;
-  gh: GitHub;
+  channel: Channel;
   now: () => number;
   kill: (pid: number) => void;
   restartLoop: () => void;
@@ -48,7 +48,7 @@ export function watchdogPass(d: WatchdogDeps): void {
     }
     const msg = MESSAGES[rec.status];
     if (msg && rec.notifiedStatus !== rec.status) {
-      d.gh.comment(rec.repo, rec.number, msg);
+      d.channel.comment(rec.repo, rec.number, msg);
       rec.notifiedStatus = rec.status;
     }
   }

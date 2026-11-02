@@ -36,7 +36,7 @@ function setup(heartbeatAgeMin: number, runAgeMin: number) {
   };
   let restarts = 0;
   const d: WatchdogDeps = {
-    cfg, store: h.store, gh, now: () => T0,
+    cfg, store: h.store, channel: gh, now: () => T0,
     kill: (pid) => killed.push(pid),
     restartLoop: () => restarts++,
     log: () => {},

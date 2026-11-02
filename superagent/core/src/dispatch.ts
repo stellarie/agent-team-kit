@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import type { Config } from "./config.ts";
 import { keepEvent, threadKey } from "./filter.ts";
-import type { GhEvent, GitHub } from "./github.ts";
+import type { Channel, GhEvent } from "./github.ts";
 import { buildRouterPrompt, parseDecisions } from "./router.ts";
 import { buildInvocation, parseOutput, type Invocation } from "./runtime.ts";
 import type { QueuedEvent, State, StateStore, ThreadRecord } from "./state.ts";
@@ -12,7 +12,7 @@ export const MAX_ROUTER_ATTEMPTS = 3;
 export interface Deps {
   cfg: Config;
   store: StateStore;
-  gh: GitHub;
+  channel: Channel;
   spawner: Spawner;
   prepare: (repo: string, number: number) => { worktree: string; branch: string };
   runRouter: (inv: Invocation, prompt: string) => string;
@@ -35,6 +35,10 @@ function clip(s: string, n: number): string {
   return s.length > n ? `${s.slice(0, n)}\n\n[truncated]` : s;
 }
 
+function liveCount(s: State): number {
+  return Object.values(s.threads).filter((r) => LIVE.has(r.status)).length;
+}
+
 function runWorker(d: Deps, rec: ThreadRecord, message: string): void {
   const inv = buildInvocation({
     runtime: d.cfg.runtime,
@@ -43,8 +47,11 @@ function runWorker(d: Deps, rec: ThreadRecord, message: string): void {
     cwd: rec.worktree,
     resumeId: rec.sessionId,
     testCommand: d.cfg.testCommand,
+    source: d.cfg.source,
+    budget: d.cfg.budget,
   });
-  const prompt = rec.sessionId ? message : `${d.prompts.worker}\n\n${message}`;
+  const limit = `\n\nKeep your final report under ${d.cfg.budget.reportWords} words.`;
+  const prompt = (rec.sessionId ? message : `${d.prompts.worker}\n\n${message}`) + limit;
   rec.pid = startJob(jobDir(d, rec.thread), { ...inv, cwd: rec.worktree, prompt }, d.spawner);
   rec.status = "running";
   rec.runStartedAt = d.now();
@@ -65,10 +72,10 @@ export function collectFinished(d: Deps, s: State): void {
     rec.pid = null;
     if (job.exitCode === 0) {
       rec.status = "idle";
-      if (out.text.trim()) d.gh.comment(rec.repo, rec.number, clip(out.text, 60000));
+      if (out.text.trim()) d.channel.comment(rec.repo, rec.number, clip(out.text, 60000));
     } else {
       rec.status = "failed";
-      d.gh.comment(rec.repo, rec.number, `Worker exited with code ${job.exitCode}.\n\n${clip(job.stderr, 4000)}`);
+      d.channel.comment(rec.repo, rec.number, `Worker exited with code ${job.exitCode}.\n\n${clip(job.stderr, 4000)}`);
     }
     if (rec.status === "idle" && rec.pending.length > 0) {
       const msg = rec.pending.join("\n\n---\n\n");
@@ -101,9 +108,11 @@ export function ingest(d: Deps, s: State, events: GhEvent[]): void {
       routeOwned(d, rec, e);
       continue;
     }
+    const labeled = e.labels.includes(d.cfg.trigger.label);
     const q = s.queue.find((x) => x.thread === key);
     if (q) {
       q.body += `\n\n---\n\n${eventText(e)}`;
+      q.labeled = q.labeled || labeled;
     } else {
       s.queue.push({
         id: e.id,
@@ -113,6 +122,7 @@ export function ingest(d: Deps, s: State, events: GhEvent[]): void {
         author: e.author,
         body: e.body,
         title: e.title,
+        labeled,
         attempts: 0,
       });
     }
@@ -143,8 +153,21 @@ function startThread(d: Deps, s: State, q: QueuedEvent): void {
   runWorker(d, rec, `Thread ${q.thread} on branch ${rec.branch}.\n\n${eventText(q)}`);
 }
 
-export function route(d: Deps, s: State): void {
-  if (s.queue.length === 0) return;
+function direct(d: Deps, q: QueuedEvent): boolean {
+  return d.cfg.router === "off" || (d.cfg.router === "label-starts" && q.labeled);
+}
+
+// Explicit tasks skip the Router model call.
+function startDirect(d: Deps, s: State): void {
+  const keep: QueuedEvent[] = [];
+  for (const q of s.queue) {
+    if (direct(d, q) && liveCount(s) < d.cfg.maxWorkers) startThread(d, s, q);
+    else keep.push(q);
+  }
+  s.queue = keep;
+}
+
+function routeWithModel(d: Deps, s: State, queue: QueuedEvent[]): QueuedEvent[] {
   const live = Object.values(s.threads).filter((r) => LIVE.has(r.status));
   let capacity = d.cfg.maxWorkers - live.length;
   const inv = buildInvocation({
@@ -154,26 +177,27 @@ export function route(d: Deps, s: State): void {
     cwd: d.cfg.worktreeRoot,
     resumeId: null,
     testCommand: null,
+    source: d.cfg.source,
+    budget: d.cfg.budget,
   });
-  const prompt = buildRouterPrompt(d.prompts.router, s.queue, live.map((r) => r.thread));
+  const prompt = buildRouterPrompt(d.prompts.router, queue, live.map((r) => r.thread), d.cfg.budget.routerBodyChars);
   let text = "";
   try {
     text = parseOutput(d.cfg.runtime, d.runRouter(inv, prompt)).text;
   } catch (e) {
     d.log(`router failed: ${e}`);
   }
-  const decisions = parseDecisions(text, new Set(s.queue.map((q) => q.thread)));
+  const decisions = parseDecisions(text, new Set(queue.map((q) => q.thread)));
   if (decisions === null) {
     d.log("router output rejected");
-    for (const q of s.queue) q.attempts += 1;
-    for (const q of s.queue.filter((x) => x.attempts >= MAX_ROUTER_ATTEMPTS)) {
-      d.gh.comment(q.repo, q.number, "I could not decide how to handle this. Please restate the request.");
+    for (const q of queue) q.attempts += 1;
+    for (const q of queue.filter((x) => x.attempts >= MAX_ROUTER_ATTEMPTS)) {
+      d.channel.comment(q.repo, q.number, "I could not decide how to handle this. Please restate the request.");
     }
-    s.queue = s.queue.filter((x) => x.attempts < MAX_ROUTER_ATTEMPTS);
-    return;
+    return queue.filter((x) => x.attempts < MAX_ROUTER_ATTEMPTS);
   }
   const keep: QueuedEvent[] = [];
-  for (const q of s.queue) {
+  for (const q of queue) {
     const dec = decisions.find((x) => x.thread === q.thread);
     if (!dec) {
       q.attempts += 1;
@@ -182,35 +206,31 @@ export function route(d: Deps, s: State): void {
     }
     if (dec.action === "ignore") continue;
     if (dec.action === "ask") {
-      if (dec.reply) d.gh.comment(q.repo, q.number, dec.reply);
+      if (dec.reply) d.channel.comment(q.repo, q.number, dec.reply);
       continue;
     }
     if (capacity <= 0) {
-      keep.push(q);
+      // Decided already; skip the Router next time.
+      keep.push({ ...q, labeled: true });
       continue;
     }
     capacity -= 1;
-    if (dec.reply) d.gh.comment(q.repo, q.number, dec.reply);
+    if (dec.reply) d.channel.comment(q.repo, q.number, dec.reply);
     startThread(d, s, q);
   }
-  s.queue = keep;
+  return keep;
+}
+
+export function route(d: Deps, s: State): void {
+  startDirect(d, s);
+  const waiting = s.queue.filter((q) => direct(d, q));
+  const undecided = s.queue.filter((q) => !direct(d, q));
+  s.queue = waiting;
+  if (undecided.length > 0) s.queue.push(...routeWithModel(d, s, undecided));
 }
 
 export function poll(d: Deps, s: State): GhEvent[] {
-  const all: GhEvent[] = [];
-  for (const repo of d.cfg.repos) {
-    const since = s.cursors[repo];
-    if (!since) {
-      // First run: start from now, not from history.
-      s.cursors[repo] = new Date(d.now()).toISOString();
-      continue;
-    }
-    const events = d.gh.poll(repo, since);
-    all.push(...events);
-    const last = events.at(-1)?.updatedAt;
-    if (last && last > since) s.cursors[repo] = last;
-  }
-  return all;
+  return d.channel.pollAll(s.cursors, d.now());
 }
 
 // Adopt or clear records a crash left in "starting".

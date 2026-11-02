@@ -107,3 +107,20 @@ export function prepareWorktree(
   }
   return { worktree, branch };
 }
+
+// Branches from the local checkout; no clone, no fetch.
+export function prepareLocalWorktree(
+  root: string,
+  name: string,
+  source: string,
+  number: number,
+  git: Git,
+): { worktree: string; branch: string } {
+  const worktree = join(root, `${name}-${number}`);
+  const branch = `feat/sa-${number}`;
+  if (!existsSync(worktree)) {
+    mkdirSync(root, { recursive: true });
+    git(["worktree", "add", "-B", branch, worktree, "HEAD"], source);
+  }
+  return { worktree, branch };
+}

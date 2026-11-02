@@ -1,4 +1,4 @@
-import type { Runtime } from "./config.ts";
+import type { Budget, Runtime, Source } from "./config.ts";
 
 export type Role = "router" | "worker";
 
@@ -9,6 +9,8 @@ export interface RunSpec {
   cwd: string;
   resumeId: string | null;
   testCommand: string | null;
+  source?: Source;
+  budget?: Budget;
 }
 
 export interface Invocation {
@@ -16,13 +18,9 @@ export interface Invocation {
   args: string[];
 }
 
-export const WORKER_TOOLS = [
-  "Read",
-  "Edit",
-  "Write",
-  "Grep",
-  "Glob",
-  "Bash(git:*)",
+export const WORKER_TOOLS = ["Read", "Edit", "Write", "Grep", "Glob", "Bash(git:*)"];
+
+export const GITHUB_TOOLS = [
   "Bash(gh pr create:*)",
   "Bash(gh pr view:*)",
   "Bash(gh pr comment:*)",
@@ -31,7 +29,21 @@ export const WORKER_TOOLS = [
 
 export function claudeTools(spec: RunSpec): string[] {
   if (spec.role === "router") return ["Read"];
-  return spec.testCommand ? [...WORKER_TOOLS, `Bash(${spec.testCommand}:*)`] : WORKER_TOOLS;
+  const tools = spec.source === "local" ? WORKER_TOOLS : [...WORKER_TOOLS, ...GITHUB_TOOLS];
+  return spec.testCommand ? [...tools, `Bash(${spec.testCommand}:*)`] : tools;
+}
+
+function claudeBudget(b: Budget | undefined): string[] {
+  if (!b) return [];
+  const out: string[] = [];
+  if (b.lean) out.push("--bare", "--strict-mcp-config", "--exclude-dynamic-system-prompt-sections");
+  if (b.effort) out.push("--effort", b.effort);
+  if (b.maxUsdPerRun) out.push("--max-budget-usd", String(b.maxUsdPerRun));
+  return out;
+}
+
+function codexBudget(b: Budget | undefined): string[] {
+  return b?.effort ? ["-c", `model_reasoning_effort="${b.effort}"`] : [];
 }
 
 // The prompt always goes on stdin, never in argv.
@@ -47,13 +59,17 @@ export function buildInvocation(spec: RunSpec): Invocation {
       spec.role === "router" ? "default" : "acceptEdits",
       "--allowedTools",
       claudeTools(spec).join(","),
+      ...claudeBudget(spec.budget),
     ];
     if (spec.resumeId) args.push("--resume", spec.resumeId);
     return { cmd: "claude", args };
   }
   const sandbox = spec.role === "router" ? "read-only" : "workspace-write";
   // Shared flags must precede `resume`; it does not inherit them.
-  const common = ["exec", "--json", "-m", spec.model, "--sandbox", sandbox, "-C", spec.cwd, "--skip-git-repo-check"];
+  const common = [
+    "exec", "--json", "-m", spec.model, "--sandbox", sandbox, "-C", spec.cwd, "--skip-git-repo-check",
+    ...codexBudget(spec.budget),
+  ];
   if (spec.resumeId) return { cmd: "codex", args: [...common, "resume", spec.resumeId, "-"] };
   return { cmd: "codex", args: [...common, "-"] };
 }

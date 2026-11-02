@@ -14,6 +14,11 @@ export interface GhEvent {
   updatedAt: string;
 }
 
+export interface Channel {
+  pollAll(cursors: Record<string, string>, now: number): GhEvent[];
+  comment(repo: string, number: number, body: string): void;
+}
+
 export type GhRunner = (args: string[], input?: string) => string;
 
 export function realGh(host: string): GhRunner {
@@ -38,10 +43,12 @@ function pages(out: string): any[] {
   return Array.isArray(parsed) && Array.isArray(parsed[0]) ? parsed.flat() : parsed;
 }
 
-export class GitHub {
+export class GitHub implements Channel {
   run: GhRunner;
-  constructor(run: GhRunner) {
+  repos: string[];
+  constructor(run: GhRunner, repos: string[] = []) {
     this.run = run;
+    this.repos = repos;
   }
 
   api(path: string): any[] {
@@ -91,6 +98,23 @@ export class GitHub {
       });
     }
     return events.sort((a, b) => a.updatedAt.localeCompare(b.updatedAt));
+  }
+
+  // The first poll of a repo starts from now, not history.
+  pollAll(cursors: Record<string, string>, now: number): GhEvent[] {
+    const all: GhEvent[] = [];
+    for (const repo of this.repos) {
+      const since = cursors[repo];
+      if (!since) {
+        cursors[repo] = new Date(now).toISOString();
+        continue;
+      }
+      const events = this.poll(repo, since);
+      all.push(...events);
+      const last = events.at(-1)?.updatedAt;
+      if (last && last > since) cursors[repo] = last;
+    }
+    return all;
   }
 
   comment(repo: string, number: number, body: string): void {

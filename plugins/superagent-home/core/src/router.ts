@@ -10,12 +10,12 @@ export interface Decision {
 
 const ACTIONS: Action[] = ["start", "ignore", "ask"];
 
-export function buildRouterPrompt(system: string, queue: QueuedEvent[], live: string[]): string {
+export function buildRouterPrompt(system: string, queue: QueuedEvent[], live: string[], maxChars = 2000): string {
   const events = queue.map((e) => ({
     thread: e.thread,
     author: e.author,
     title: e.title,
-    body: e.body.length > 2000 ? `${e.body.slice(0, 2000)} [truncated]` : e.body,
+    body: e.body.length > maxChars ? `${e.body.slice(0, maxChars)} [truncated]` : e.body,
   }));
   return `${system}\n\nLive threads: ${JSON.stringify(live)}\n\nEvents:\n${JSON.stringify(events, null, 2)}\n`;
 }

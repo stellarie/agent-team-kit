@@ -26,6 +26,30 @@ Then run `codex plugin marketplace add <path to the clone>`.
 5. Ask Codex to start superagent.
 6. Run `node core/bin/superagent.mjs watchdog` every 10 minutes from a scheduler, if policy allows one.
 
+## Without GitHub
+
+Set `"source": "local"` to run with no GitHub access. Start from `config.local.example.json`.
+
+- `localRepos` maps a short name to a local git checkout.
+- `ask` queues a task. A Worker branches `feat/sa-<n>` from the checkout HEAD and commits there. It never pushes.
+- `show` prints the Worker reports for one task.
+- To follow up on a task, run `ask "<text>" --thread <n>`.
+
+## Token budget
+
+| Key | Effect |
+| --- | --- |
+| `router` | `off` skips the Router model. `label-starts` skips it for labeled events. Local defaults to `off`. |
+| `budget.effort` | Reasoning effort: `low`, `medium`, `high`, `xhigh`, or `max`. |
+| `budget.reportWords` | Word cap on each Worker report. |
+| `budget.routerBodyChars` | Characters of each event body sent to the Router. |
+| `budget.maxUsdPerRun` | Claude only, ignored here: stop a Worker run at this cost. |
+| `budget.lean` | Claude only, ignored here: `--bare` and no MCP servers. Needs API-key sign-in. |
+| `models` | Use a light Router model and a mid-size Worker model. |
+| `maxWorkers` | Keep at 1. |
+
+A follow-up resumes the Worker session, so the prompt cache stays warm.
+
 ## Work machine rules
 
 - This plugin ships no persona text. Keep personas in your own `~/.codex/AGENTS.md`.

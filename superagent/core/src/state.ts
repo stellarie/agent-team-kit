@@ -26,6 +26,7 @@ export interface QueuedEvent {
   author: string;
   body: string;
   title: string;
+  labeled: boolean;
   attempts: number;
 }
 

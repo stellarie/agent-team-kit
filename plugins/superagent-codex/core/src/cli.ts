@@ -4,11 +4,12 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DEFAULT_CONFIG_PATH, expandHome, loadConfig, type Config } from "./config.ts";
 import { recover, tick, type Deps } from "./dispatch.ts";
-import { GitHub, realGh } from "./github.ts";
+import { GitHub, realGh, type Channel } from "./github.ts";
+import { LocalInbox } from "./local.ts";
 import { acquireLock, AlreadyRunning, isAlive, readLockPid } from "./lock.ts";
 import { StateStore } from "./state.ts";
 import { watchdogPass } from "./watchdog.ts";
-import { killTree, prepareWorktree, realGit, realSpawner } from "./worker.ts";
+import { killTree, prepareLocalWorktree, prepareWorktree, realGit, realSpawner } from "./worker.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const BIN = join(ROOT, "bin", "superagent.mjs");
@@ -20,7 +21,8 @@ function log(msg: string): void {
 function prompts(cfg: Config): { router: string; worker: string } {
   const read = (n: string) => readFileSync(join(ROOT, "prompts", n), "utf8");
   const overlay = cfg.promptOverlay ? `\n\n${readFileSync(cfg.promptOverlay, "utf8")}` : "";
-  return { router: read("router.md") + overlay, worker: read("worker.md") + overlay };
+  const worker = cfg.source === "local" ? "worker-local.md" : "worker.md";
+  return { router: read("router.md") + overlay, worker: read(worker) + overlay };
 }
 
 function runCli(cmd: string, args: string[], input: string, cwd: string): string {
@@ -36,14 +38,21 @@ function runCli(cmd: string, args: string[], input: string, cwd: string): string
   });
 }
 
+function channel(cfg: Config): Channel {
+  return cfg.source === "local" ? new LocalInbox(cfg.stateDir, cfg.trigger.label) : new GitHub(realGh(cfg.ghHost), cfg.repos);
+}
+
 function deps(cfg: Config, store: StateStore): Deps {
-  const ghRun = realGh(cfg.ghHost);
+  const prepare: Deps["prepare"] =
+    cfg.source === "local"
+      ? (repo, n) => prepareLocalWorktree(cfg.worktreeRoot, repo, cfg.localRepos[repo], n, realGit)
+      : (repo, n) => prepareWorktree(cfg.worktreeRoot, repo, n, realGit, (a) => realGh(cfg.ghHost)(a));
   return {
     cfg,
     store,
-    gh: new GitHub(ghRun),
+    channel: channel(cfg),
     spawner: realSpawner,
-    prepare: (repo, n) => prepareWorktree(cfg.worktreeRoot, repo, n, realGit, (a) => ghRun(a)),
+    prepare,
     runRouter: (inv, prompt) => runCli(inv.cmd, inv.args, prompt, cfg.worktreeRoot),
     prompts: prompts(cfg),
     now: Date.now,
@@ -78,7 +87,7 @@ async function runLoop(cfg: Config, store: StateStore): Promise<void> {
   const s = store.load();
   recover(d, s);
   store.save(s);
-  log(`loop started, runtime ${cfg.runtime}, repos ${cfg.repos.join(", ")}`);
+  log(`loop started, runtime ${cfg.runtime}, source ${cfg.source}`);
   for (;;) {
     try {
       tick(d);
@@ -102,10 +111,12 @@ function which(cmd: string): string | null {
 }
 
 function doctor(cfg: Config): boolean {
-  const checks: [string, () => string | true][] = [
-    ["git on PATH", () => (which("git") ? true : "git not found")],
+  const local: [string, () => string | true][] = Object.entries(cfg.localRepos).map(([n, p]) => [
+    `local repo ${n}`,
+    () => (existsSync(join(p, ".git")) ? true : `${p} is not a git checkout`),
+  ]);
+  const github: [string, () => string | true][] = [
     ["gh on PATH", () => (which("gh") ? true : "gh not found")],
-    [`${cfg.runtime} on PATH`, () => (which(cfg.runtime) ? true : `${cfg.runtime} not found`)],
     [
       `gh signed in to ${cfg.ghHost}`,
       () => {
@@ -126,6 +137,11 @@ function doctor(cfg: Config): boolean {
         return true;
       },
     ],
+  ];
+  const checks: [string, () => string | true][] = [
+    ["git on PATH", () => (which("git") ? true : "git not found")],
+    [`${cfg.runtime} on PATH`, () => (which(cfg.runtime) ? true : `${cfg.runtime} not found`)],
+    ...(cfg.source === "local" ? local : github),
     [
       `${cfg.runtime} signed in`,
       () => {
@@ -164,12 +180,49 @@ function status(store: StateStore): void {
   for (const r of rows) console.log(`${r.status.padEnd(8)} ${r.thread}  ${r.branch}  session ${r.sessionId ?? "-"}`);
 }
 
+function flag(argv: string[], name: string): string | undefined {
+  const i = argv.indexOf(name);
+  return i >= 0 ? argv[i + 1] : undefined;
+}
+
+function local(cmd: string, argv: string[], cfg: Config): number {
+  if (cfg.source !== "local") {
+    console.error(`${cmd} needs "source": "local"`);
+    return 2;
+  }
+  const inbox = new LocalInbox(cfg.stateDir, cfg.trigger.label);
+  const names = Object.keys(cfg.localRepos);
+  const repo = flag(argv, "--repo") ?? (names.length === 1 ? names[0] : undefined);
+  if (!repo || !cfg.localRepos[repo]) {
+    console.error(`pass --repo <${names.join("|")}>`);
+    return 2;
+  }
+  const thread = flag(argv, "--thread");
+  if (cmd === "show") {
+    if (!thread) {
+      console.error("pass --thread N");
+      return 2;
+    }
+    console.log(inbox.read(repo, Number(thread)) || "no report yet");
+    return 0;
+  }
+  const skip = new Set(["--repo", "--thread", "--config"]);
+  const words = argv.slice(1).filter((a, i, all) => !skip.has(a) && !skip.has(all[i - 1] ?? ""));
+  if (words.length === 0) {
+    console.error('usage: superagent ask "<task>" [--repo name] [--thread N]');
+    return 2;
+  }
+  const item = inbox.ask(repo, words.join(" "), thread ? Number(thread) : undefined);
+  console.log(`queued ${repo}#${item.number}; read it with: superagent show --repo ${repo} --thread ${item.number}`);
+  return 0;
+}
+
 export async function main(argv: string[]): Promise<number> {
   const cmd = argv[0] ?? "help";
   const i = argv.indexOf("--config");
   const configPath = expandHome(i >= 0 ? argv[i + 1] : process.env.SUPERAGENT_CONFIG ?? DEFAULT_CONFIG_PATH);
   if (cmd === "help" || cmd === "--help") {
-    console.log("usage: superagent <start|stop|status|doctor|watchdog|run> [--config path]");
+    console.log("usage: superagent <start|stop|status|doctor|watchdog|run|ask|show> [--config path]");
     return 0;
   }
   const cfg = loadConfig(configPath, log);
@@ -202,11 +255,14 @@ export async function main(argv: string[]): Promise<number> {
       return 0;
     case "doctor":
       return doctor(cfg) ? 0 : 1;
+    case "ask":
+    case "show":
+      return local(cmd, argv, cfg);
     case "watchdog":
       watchdogPass({
         cfg,
         store,
-        gh: new GitHub(realGh(cfg.ghHost)),
+        channel: channel(cfg),
         now: Date.now,
         kill: killTree,
         restartLoop: () => startDetached(configPath, store.dir),

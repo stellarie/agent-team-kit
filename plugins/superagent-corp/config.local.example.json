@@ -1,0 +1,40 @@
+{
+  "runtime": "claude",
+  "trigger": {
+    "label": "superagent",
+    "mention": "@superagent"
+  },
+  "pollSeconds": 60,
+  "models": {
+    "router": "claude-haiku-5-5",
+    "worker": "claude-sonnet-5-5"
+  },
+  "worktreeRoot": "~/superagent-work",
+  "watchdog": {
+    "stallMinutes": 20,
+    "maxRunMinutes": 120
+  },
+  "stateDir": "~/.superagent/state",
+  "testCommand": null,
+  "maxWorkers": 1,
+  "promptOverlay": null,
+  "policy": {
+    "allowedRuntimes": [
+      "claude",
+      "codex"
+    ],
+    "maxWorkersCap": 1
+  },
+  "source": "local",
+  "localRepos": {
+    "app": "C:/path/to/your/checkout"
+  },
+  "router": "off",
+  "budget": {
+    "lean": false,
+    "effort": "low",
+    "maxUsdPerRun": 1,
+    "routerBodyChars": 600,
+    "reportWords": 120
+  }
+}
