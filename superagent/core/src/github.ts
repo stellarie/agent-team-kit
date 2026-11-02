@@ -19,6 +19,9 @@ export interface Channel {
   comment(repo: string, number: number, body: string): void;
 }
 
+// Marks service comments so the loop never reads its own output.
+export const MARKER = "<!-- superagent -->";
+
 export type GhRunner = (args: string[], input?: string) => string;
 
 export function realGh(host: string): GhRunner {
@@ -118,7 +121,9 @@ export class GitHub implements Channel {
   }
 
   comment(repo: string, number: number, body: string): void {
-    this.run(["issue", "comment", String(number), "--repo", repo, "--body-file", "-"], body);
+    this.run(["issue", "comment", String(number), "--repo", repo, "--body-file", "-"], `${body}
+
+${MARKER}`);
   }
 
   login(): string {

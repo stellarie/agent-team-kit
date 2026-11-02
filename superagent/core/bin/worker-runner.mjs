@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Runs one CLI turn for a Worker or Router.
 // Writes heartbeat, out.txt, and result.json in the job dir.
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -17,6 +17,16 @@ function writeAtomic(name, text) {
 const beat = () => writeAtomic("heartbeat", String(Date.now()));
 beat();
 const timer = setInterval(beat, 15_000);
+
+// Windows npm shims are .cmd files spawn cannot find bare.
+if (process.platform === "win32" && !/[\\/.]/.test(job.cmd)) {
+  try {
+    const hits = execFileSync("where", [job.cmd], { encoding: "utf8", windowsHide: true }).split(/\r?\n/);
+    job.cmd = hits.find((h) => /\.(exe|cmd|bat)$/i.test(h.trim()))?.trim() ?? job.cmd;
+  } catch {
+    // Leave it; spawn reports ENOENT.
+  }
+}
 
 const isCmd = /\.(cmd|bat)$/i.test(job.cmd);
 const quote = (a) => (/[\s"&|<>^()%!,]/.test(a) ? `"${a.replace(/"/g, '""')}"` : a);

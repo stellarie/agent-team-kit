@@ -62,7 +62,7 @@ function deps(cfg: Config, store: StateStore): Deps {
     cfg,
     store,
     channel: channel(cfg),
-    spawner: (dir, job) => realSpawner(dir, { ...job, cmd: resolveCmd(job.cmd) }),
+    spawner: realSpawner,
     prepare,
     runRouter: (inv, prompt) => runCli(resolveCmd(inv.cmd), inv.args, prompt, cfg.worktreeRoot),
     prompts: prompts(cfg),
@@ -158,7 +158,7 @@ function doctor(cfg: Config): boolean {
       () => {
         const args = cfg.runtime === "codex" ? ["login", "status"] : ["auth", "status"];
         try {
-          runCli(which(cfg.runtime) ?? cfg.runtime, args, "", process.cwd());
+          runCli(resolveCmd(cfg.runtime), args, "", process.cwd());
           return true;
         } catch {
           return `${cfg.runtime} ${args.join(" ")} failed`;
