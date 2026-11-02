@@ -1,0 +1,21 @@
+{
+  "name": "agent-team-kit",
+  "owner": {
+    "name": "stellarie"
+  },
+  "metadata": {
+    "description": "Superagent plugins from agent-team-kit: a resident GitHub Router with isolated Claude Code Workers."
+  },
+  "plugins": [
+    {
+      "name": "superagent-home",
+      "source": "./plugins/superagent-home",
+      "description": "Resident GitHub agent for a personal machine (Claude Code)."
+    },
+    {
+      "name": "superagent-corp",
+      "source": "./plugins/superagent-corp",
+      "description": "Resident GitHub agent for a managed work machine (Claude Code)."
+    }
+  ]
+}

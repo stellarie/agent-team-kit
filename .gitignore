@@ -3,3 +3,7 @@ notes/
 scratch/
 .agent-notes/
 docs/tasks/
+
+# Superagent runtime state.
+superagent/**/state/
+.superagent/

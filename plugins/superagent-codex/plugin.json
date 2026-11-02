@@ -1,0 +1,11 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "superagent-codex",
+  "version": "0.1.0",
+  "description": "Resident GitHub agent for a managed work machine: one Codex Worker at a time, owner allowlist.",
+  "author": {
+    "name": "stellarie"
+  },
+  "license": "MIT",
+  "repository": "https://github.com/stellarie/agent-team-kit"
+}

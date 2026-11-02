@@ -1,0 +1,43 @@
+{
+  "runtime": "claude",
+  "repos": [
+    "your-org/your-repo"
+  ],
+  "ghHost": "github.com",
+  "allow": {
+    "logins": [
+      "your-login"
+    ]
+  },
+  "trigger": {
+    "label": "superagent",
+    "mention": "@superagent"
+  },
+  "pollSeconds": 60,
+  "models": {
+    "router": "claude-haiku-5-5",
+    "worker": "claude-opus-5-5"
+  },
+  "worktreeRoot": "~/superagent-work",
+  "watchdog": {
+    "stallMinutes": 20,
+    "maxRunMinutes": 120
+  },
+  "stateDir": "~/.superagent/state",
+  "testCommand": null,
+  "maxWorkers": 2,
+  "promptOverlay": "~/.claude/CLAUDE.md",
+  "policy": {
+    "allowedRuntimes": [
+      "claude"
+    ],
+    "allowedOwners": [
+      "your-login"
+    ],
+    "maxWorkersCap": 2,
+    "allowOwnLogin": false,
+    "forbiddenLogins": [
+      "your-login"
+    ]
+  }
+}

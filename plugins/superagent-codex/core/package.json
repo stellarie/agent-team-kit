@@ -1,0 +1,13 @@
+{
+  "name": "@stellarie/superagent-core",
+  "version": "0.1.0",
+  "description": "Resident Router and isolated Workers driven by GitHub events, for Claude Code or Codex.",
+  "license": "MIT",
+  "type": "module",
+  "private": true,
+  "engines": { "node": ">=24" },
+  "bin": { "superagent": "bin/superagent.mjs" },
+  "scripts": {
+    "test": "node --test --test-concurrency=1 \"test/*.test.ts\""
+  }
+}

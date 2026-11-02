@@ -1,0 +1,10 @@
+{
+  "name": "superagent-corp",
+  "version": "0.1.0",
+  "description": "Resident GitHub agent for a managed work machine: one Claude Code Worker at a time, no persona, owner allowlist.",
+  "author": {
+    "name": "stellarie"
+  },
+  "license": "MIT",
+  "repository": "https://github.com/stellarie/agent-team-kit"
+}

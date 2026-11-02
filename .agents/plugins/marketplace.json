@@ -1,0 +1,17 @@
+{
+  "name": "agent-team-kit",
+  "owner": {
+    "name": "stellarie"
+  },
+  "plugins": [
+    {
+      "name": "superagent-codex",
+      "source": {
+        "source": "local",
+        "path": "./plugins/superagent-codex"
+      },
+      "description": "Resident GitHub agent for a managed work machine (Codex).",
+      "category": "development"
+    }
+  ]
+}
