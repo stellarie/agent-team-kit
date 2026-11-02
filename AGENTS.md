@@ -155,6 +155,7 @@ Load a skill when the task matches its row. Do not load all of them.
 | Write a contract, a plan, or a handoff record | `dev-task-record` |
 | Finish work, run the gate, name a branch | `dev-standards` |
 | Map unfamiliar code before changing it | `dev-analyze-codebase` |
+| Gather facts before a brainstorm or a design decision | `dev-discovery` |
 | Diagnose a failure | `dev-debug` |
 | Write the failing test first | `dev-test-driven-development` |
 | Prove a regression test catches its bug | `dev-prove-a-regression-test-catches-its-bug` |
