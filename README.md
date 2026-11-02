@@ -62,6 +62,20 @@ Each skill folder name must equal the `name` in its `SKILL.md` frontmatter. Inst
 
 Sections 2 to 5 of `AGENTS.md` hold the writing standard, the git rules, the completion gate, and the reasoning principles. Edit them to fit your team.
 
+## Superagent
+
+A resident GitHub agent, modeled on the Super-agent design: a Router dispatches events, and isolated Workers open draft pull requests.
+
+| Piece | For | Path |
+| --- | --- | --- |
+| Core service | All plugins | [superagent/core](superagent/core/README.md) |
+| `superagent-home` | Claude Code on a personal machine | [plugins/superagent-home](plugins/superagent-home/README.md) |
+| `superagent-corp` | Claude Code on a managed work machine | [plugins/superagent-corp](plugins/superagent-corp/README.md) |
+| `superagent-codex` | Codex on a managed work machine | [plugins/superagent-codex](plugins/superagent-codex/README.md) |
+| `dev-superagent-workflow` | Any session with no plugin | [.agents/skills/dev-superagent-workflow](.agents/skills/dev-superagent-workflow/SKILL.md) |
+
+Edit `superagent/core/` only. Then run `scripts/sync-superagent-core.sh` to update the copy in each plugin.
+
 ## Plugins
 
 See [PLUGINS.md](PLUGINS.md).

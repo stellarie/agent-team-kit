@@ -1,0 +1,10 @@
+{
+  "name": "superagent-home",
+  "version": "0.1.0",
+  "description": "Resident GitHub agent for a personal machine: a Router dispatches, Claude Code Workers open draft PRs.",
+  "author": {
+    "name": "stellarie"
+  },
+  "license": "MIT",
+  "repository": "https://github.com/stellarie/agent-team-kit"
+}

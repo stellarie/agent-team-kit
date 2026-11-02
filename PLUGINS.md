@@ -68,3 +68,20 @@ Package names were read from the repository's `package.json` files. The install 
 | whale-girl | Web GUI desktop pet | [vlln/whale-girl](https://github.com/vlln/whale-girl) |
 
 Review a third-party plugin before you install it. It runs with your permissions.
+
+## This kit
+
+This repository is also a marketplace for Claude Code and for Codex.
+
+```text
+/plugin marketplace add stellarie/agent-team-kit
+/plugin install superagent-home@agent-team-kit
+/plugin install superagent-corp@agent-team-kit
+```
+
+```sh
+codex plugin marketplace add stellarie/agent-team-kit --ref main --sparse .agents/plugins
+codex plugin add superagent-codex@agent-team-kit
+```
+
+See the Superagent section of [README.md](README.md).
