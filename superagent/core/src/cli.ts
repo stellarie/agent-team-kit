@@ -42,6 +42,17 @@ function channel(cfg: Config): Channel {
   return cfg.source === "local" ? new LocalInbox(cfg.stateDir, cfg.trigger.label) : new GitHub(realGh(cfg.ghHost), cfg.repos);
 }
 
+// Windows npm shims are .cmd files spawn cannot find bare.
+function resolveCmd(cmd: string): string {
+  if (process.platform !== "win32" || /[\/.]/.test(cmd)) return cmd;
+  try {
+    const hits = execFileSync("where", [cmd], { encoding: "utf8", windowsHide: true }).split(/\r?\n/);
+    return hits.find((h) => /\.(exe|cmd|bat)$/i.test(h.trim()))?.trim() ?? cmd;
+  } catch {
+    return cmd;
+  }
+}
+
 function deps(cfg: Config, store: StateStore): Deps {
   const prepare: Deps["prepare"] =
     cfg.source === "local"
@@ -51,9 +62,9 @@ function deps(cfg: Config, store: StateStore): Deps {
     cfg,
     store,
     channel: channel(cfg),
-    spawner: realSpawner,
+    spawner: (dir, job) => realSpawner(dir, { ...job, cmd: resolveCmd(job.cmd) }),
     prepare,
-    runRouter: (inv, prompt) => runCli(inv.cmd, inv.args, prompt, cfg.worktreeRoot),
+    runRouter: (inv, prompt) => runCli(resolveCmd(inv.cmd), inv.args, prompt, cfg.worktreeRoot),
     prompts: prompts(cfg),
     now: Date.now,
     log,
