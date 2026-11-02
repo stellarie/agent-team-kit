@@ -66,6 +66,8 @@ Sections 2 to 5 of `AGENTS.md` hold the writing standard, the git rules, the com
 
 A resident GitHub agent, modeled on the Super-agent design: a Router dispatches events, and isolated Workers open draft pull requests.
 
+Agents setting it up: read [superagent/SETUP.md](superagent/SETUP.md) first.
+
 | Piece | For | Path |
 | --- | --- | --- |
 | Core service | All plugins | [superagent/core](superagent/core/README.md) |
